@@ -2,18 +2,12 @@
 const nextConfig = {
   reactStrictMode: true,
 
-  // ✅ remove static export options
-  // (Vercel needs server output, not standalone or 'out')
+  // Optional: disables image optimization if you’re not using the <Image> component
   images: {
-    unoptimized: true, // optional
+    unoptimized: true,
   },
 
-  // ✅ enable experimental turbo safely
-  experimental: {
-    turbo: {
-      rules: {},
-    },
-  },
+  // Remove all experimental flags — Next 16 auto-uses Turbopack
 };
 
 module.exports = nextConfig;
