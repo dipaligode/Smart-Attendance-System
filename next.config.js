@@ -1,10 +1,13 @@
-/** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-
-  // Important: do NOT use "distDir" or "output" here for Vercel
-  images: {
-    unoptimized: true,
+  async redirects() {
+    return [
+      {
+        source: '/',
+        destination: '/login',
+        permanent: true,
+      },
+    ];
   },
 };
 
