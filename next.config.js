@@ -2,9 +2,23 @@
 const nextConfig = {
   reactStrictMode: true,
 
-  // Important: do NOT use "distDir" or "output" here for Vercel
   images: {
     unoptimized: true,
+  },
+
+  experimental: {
+    // Disable Turbopack for production builds to generate manifest properly
+    turbo: false,
+  },
+
+  async redirects() {
+    return [
+      {
+        source: '/',
+        destination: '/login',
+        permanent: true,
+      },
+    ];
   },
 };
 
