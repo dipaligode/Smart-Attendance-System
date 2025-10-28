@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Html5QrcodeScanner } from "html5-qrcode";
-import { ref, get, update, push } from "firebase/database";
+import { useEffect, useRef, useState } from "react";
+import { Html5Qrcode } from "html5-qrcode";
+import { ref, get, update } from "firebase/database";
 import { database } from "../../firebase/firebaseConfig";
 
 export default function StudentDashboard() {
@@ -10,12 +10,16 @@ export default function StudentDashboard() {
   const [scanning, setScanning] = useState(false);
   const [message, setMessage] = useState("");
   const [attendanceSummary, setAttendanceSummary] = useState([]);
+  const [scanner, setScanner] = useState(null);
+  const readerRef = useRef(null);
 
   // ✅ Load student info from localStorage
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user"));
     if (user?.email && user?.role === "students") {
       fetchStudentData(user.email);
+    } else {
+      setMessage("⚠️ Please login as a student first.");
     }
   }, []);
 
@@ -33,7 +37,7 @@ export default function StudentDashboard() {
     }
   };
 
-  // ✅ Load attendance summary
+  // ✅ Load attendance summary for that student
   const loadAttendanceSummary = async (studentId) => {
     const attSnap = await get(ref(database, "attendance"));
     if (!attSnap.exists()) return;
@@ -60,21 +64,37 @@ export default function StudentDashboard() {
     setAttendanceSummary(result);
   };
 
-  // ✅ Start scanning QR
-  const startScanner = () => {
-    setMessage("");
-    setScanning(true);
+  // ✅ Start camera + QR scanning
+  const startScanner = async () => {
+    if (scanner) {
+      setMessage("Camera already active!");
+      return;
+    }
 
-    const scanner = new Html5QrcodeScanner("reader", {
-      qrbox: { width: 300, height: 300 },
-      fps: 10,
-    });
+    try {
+      setScanning(true);
+      const html5QrCode = new Html5Qrcode("reader");
+      setScanner(html5QrCode);
 
-    scanner.render(async (qrData) => {
-      scanner.clear();
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 300, height: 300 } },
+        async (qrValue) => {
+          // Stop after reading once
+          await html5QrCode.stop();
+          setScanner(null);
+          setScanning(false);
+          await handleQrScan(qrValue);
+        },
+        (errorMessage) => {
+          // Optional: console.log(errorMessage);
+        }
+      );
+    } catch (err) {
+      console.error(err);
+      setMessage("❌ Unable to start camera. Please allow camera access.");
       setScanning(false);
-      await handleQrScan(qrData);
-    });
+    }
   };
 
   // ✅ Handle QR scan
@@ -101,7 +121,7 @@ export default function StudentDashboard() {
         return;
       }
 
-      // ✅ Get GPS
+      // ✅ Get GPS location
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           const lat = pos.coords.latitude;
@@ -130,6 +150,16 @@ export default function StudentDashboard() {
     }
   };
 
+  // ✅ Stop scanning (optional manual stop)
+  const stopScanner = async () => {
+    if (scanner) {
+      await scanner.stop();
+      setScanner(null);
+      setScanning(false);
+      setMessage("🛑 Scanner stopped");
+    }
+  };
+
   return (
     <div style={{ padding: 40, fontFamily: "Inter, sans-serif" }}>
       <h1 style={{ fontSize: "2rem", fontWeight: "bold" }}>🎓 Student Dashboard</h1>
@@ -145,20 +175,17 @@ export default function StudentDashboard() {
           {!scanning ? (
             <button
               onClick={startScanner}
-              style={{
-                margin: "20px 0",
-                padding: "10px 20px",
-                borderRadius: "10px",
-                background: "#2563eb",
-                color: "white",
-                border: "none",
-                cursor: "pointer",
-              }}
+              style={btnStyle}
             >
-              📷 Scan QR to Mark Attendance
+              📷 Open Camera to Scan QR
             </button>
           ) : (
-            <div id="reader" style={{ width: "100%", maxWidth: "400px" }} />
+            <>
+              <div id="reader" ref={readerRef} style={{ width: "100%", maxWidth: 400 }} />
+              <button onClick={stopScanner} style={stopBtnStyle}>
+                🛑 Stop Scanning
+              </button>
+            </>
           )}
 
           {message && (
@@ -172,16 +199,7 @@ export default function StudentDashboard() {
           {attendanceSummary.length === 0 ? (
             <p>No attendance data yet.</p>
           ) : (
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                marginTop: 20,
-                background: "white",
-                borderRadius: "10px",
-                overflow: "hidden",
-              }}
-            >
+            <table style={tableStyle}>
               <thead>
                 <tr style={{ background: "#2563eb", color: "white" }}>
                   <th style={th}>Subject</th>
@@ -207,6 +225,33 @@ export default function StudentDashboard() {
     </div>
   );
 }
+
+// --- Styles ---
+const btnStyle = {
+  margin: "20px 0",
+  padding: "10px 20px",
+  borderRadius: "10px",
+  background: "#2563eb",
+  color: "white",
+  border: "none",
+  cursor: "pointer",
+  fontSize: "1rem",
+};
+
+const stopBtnStyle = {
+  ...btnStyle,
+  background: "#dc2626",
+  marginTop: "10px",
+};
+
+const tableStyle = {
+  width: "100%",
+  borderCollapse: "collapse",
+  marginTop: 20,
+  background: "white",
+  borderRadius: "10px",
+  overflow: "hidden",
+};
 
 const th = {
   padding: "10px",
