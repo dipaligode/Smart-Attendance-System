@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Export as static HTML for Firebase Hosting
-output: "standalone",
+// output: "standalone",
 
   // Output build files to /out folder
   distDir: "out",
