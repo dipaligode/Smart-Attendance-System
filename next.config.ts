@@ -1,21 +1,19 @@
-import type { NextConfig } from "next";
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
 
-const nextConfig: NextConfig = {
-  // Export as static HTML for Firebase Hosting
-// output: "standalone",
-
-  // Output build files to /out folder
-  distDir: "out",
-
-  // Disable image optimization (required for static export)
+  // ✅ remove static export options
+  // (Vercel needs server output, not standalone or 'out')
   images: {
-    unoptimized: true,
+    unoptimized: true, // optional
   },
 
-  // Keep TypeScript strictness
-  typescript: {
-    ignoreBuildErrors: false,
+  // ✅ enable experimental turbo safely
+  experimental: {
+    turbo: {
+      rules: {},
+    },
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
