@@ -2,13 +2,12 @@
 const nextConfig = {
   reactStrictMode: true,
 
+  // ✅ Correct setting for Vercel — not static export
+  output: "standalone",
+
+  // Allow Vercel’s default .next directory to be used
   images: {
     unoptimized: true,
-  },
-
-  experimental: {
-    // Disable Turbopack for production builds to generate manifest properly
-    turbo: false,
   },
 
   async redirects() {
