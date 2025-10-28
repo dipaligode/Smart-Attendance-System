@@ -2,12 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
 
-  // Optional: disables image optimization if you’re not using the <Image> component
+  // Important: do NOT use "distDir" or "output" here for Vercel
   images: {
     unoptimized: true,
   },
-
-  // Remove all experimental flags — Next 16 auto-uses Turbopack
 };
 
 module.exports = nextConfig;
