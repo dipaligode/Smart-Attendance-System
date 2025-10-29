@@ -2,11 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { ref, get, set } from "firebase/database";
-import { database } from "../../firebase/firebaseConfig"; // your firebase config file
+import { database } from "../../firebase/firebaseConfig";
 import { Html5Qrcode } from "html5-qrcode";
-import { update } from "firebase/database"; // import update
-
-
 
 export default function StudentDashboard() {
   const [student, setStudent] = useState(null);
@@ -19,8 +16,7 @@ export default function StudentDashboard() {
   const subjectId = "s001"; // Must match subject in DB
   const sessionId = "session001"; // Active session id (should come dynamically)
 
-  // Duration to block repeated scans: 30 minutes in seconds
-  const BLOCK_TIME_SECONDS = 30 * 60;
+  const BLOCK_TIME_SECONDS = 30 * 60; // 30 minutes
 
   // Fetch student info and attendance summary
   useEffect(() => {
@@ -65,7 +61,7 @@ export default function StudentDashboard() {
       .catch(console.error);
   }, [studentId, subjectId]);
 
-  // Check if the student can scan or blocked due to recent attendance
+  // Check if student can scan
   const canScan = () => {
     const session = attendanceSummary.find((s) => s.sessionId === sessionId);
     if (!session || !session.lastAttendance) return true;
@@ -122,18 +118,17 @@ export default function StudentDashboard() {
                 `attendance/${subjectId}/${sessionId}/${studentId}`
               );
 
-              await update(attendanceRef, {
-  timestamp,
-  present: true,
-  lat: latitude,
-  lng: longitude,
-});
+              // Use set() to save all fields correctly
+              await set(attendanceRef, {
+                timestamp,
+                present: true,
+                lat: latitude,
+                lng: longitude,
+              });
 
+              alert(`Attendance marked!\nQR: ${decodedText}`);
 
-              alert(
-                `Attendance marked!\nQR: ${decodedText}`
-              );
-
+              // Update local summary
               setAttendanceSummary((prev) => {
                 const newSummary = [...prev];
                 const index = newSummary.findIndex(
@@ -150,7 +145,7 @@ export default function StudentDashboard() {
                   newSummary.push({
                     sessionId,
                     presentCount: 1,
-                    totalStudents: 1, // adjust if needed
+                    totalStudents: 1,
                     percentage: 100,
                     lastAttendance: timestamp,
                   });
