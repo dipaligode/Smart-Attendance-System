@@ -16,7 +16,10 @@ export default function StudentDashboard() {
   const subjectId = "s001"; // Must match subject in DB
   const sessionId = "session001"; // Active session id (should come dynamically)
 
-  // Fetch student info
+  // Duration to block repeated scans: 30 minutes in seconds
+  const BLOCK_TIME_SECONDS = 30 * 60;
+
+  // Fetch student info and attendance summary
   useEffect(() => {
     const studentRef = ref(database, `students/${studentId}`);
     get(studentRef)
@@ -25,7 +28,6 @@ export default function StudentDashboard() {
       })
       .catch(console.error);
 
-    // Fetch attendance summary for this subject
     const attendanceRef = ref(database, `attendance/${subjectId}`);
     get(attendanceRef)
       .then((snapshot) => {
@@ -35,18 +37,22 @@ export default function StudentDashboard() {
 
           Object.keys(sessions).forEach((sessId) => {
             const sessData = sessions[sessId];
-            const total = Object.keys(sessData).length;
-            const present = Object.values(sessData).filter(
+            const presentCount = Object.values(sessData).filter(
               (a) => a.present
             ).length;
-            const lastAttendance = sessData[studentId]?.timestamp || null;
+
+            const totalStudents = Object.keys(sessData).length;
+
+            const studentAttendance = sessData[studentId] || null;
 
             summary.push({
               sessionId: sessId,
-              present,
-              total,
-              percentage: total ? Math.round((present / total) * 100) : 0,
-              lastAttendance,
+              presentCount,
+              totalStudents,
+              percentage: totalStudents
+                ? Math.round((presentCount / totalStudents) * 100)
+                : 0,
+              lastAttendance: studentAttendance ? studentAttendance.timestamp : null,
             });
           });
 
@@ -56,7 +62,25 @@ export default function StudentDashboard() {
       .catch(console.error);
   }, [studentId, subjectId]);
 
+  // Check if the student can scan or blocked due to recent attendance
+  const canScan = () => {
+    const session = attendanceSummary.find((s) => s.sessionId === sessionId);
+    if (!session || !session.lastAttendance) return true;
+
+    const now = Math.floor(Date.now() / 1000);
+    const elapsed = now - session.lastAttendance;
+
+    return elapsed > BLOCK_TIME_SECONDS;
+  };
+
   const startScanner = async () => {
+    if (!canScan()) {
+      alert(
+        "You have already marked attendance for this session recently. Please wait 30 minutes before scanning again."
+      );
+      return;
+    }
+
     if (!Html5Qrcode.getCameras) {
       setError("Camera API not supported in this browser.");
       return;
@@ -85,48 +109,46 @@ export default function StudentDashboard() {
           await html5QrcodeScannerRef.current.stop();
           setScanning(false);
 
-          // Get GPS location
           navigator.geolocation.getCurrentPosition(
             async (position) => {
               const { latitude, longitude } = position.coords;
+              const timestamp = Math.floor(Date.now() / 1000);
 
-              // Save attendance to Firebase with subjectId included in path
               const attendanceRef = ref(
                 database,
                 `attendance/${subjectId}/${sessionId}/${studentId}`
               );
 
               await set(attendanceRef, {
-                timestamp: Math.floor(Date.now() / 1000), // seconds
+                timestamp,
                 present: true,
                 lat: latitude,
                 lng: longitude,
               });
 
               alert(
-                `Attendance marked!\nQR: ${decodedText}\nLat: ${latitude}\nLng: ${longitude}`
+                `Attendance marked!\nQR: ${decodedText}`
               );
 
-              // Update summary table in UI
               setAttendanceSummary((prev) => {
                 const newSummary = [...prev];
                 const index = newSummary.findIndex(
                   (s) => s.sessionId === sessionId
                 );
+
                 if (index >= 0) {
-                  newSummary[index].present += 1;
-                  newSummary[index].total += 1;
+                  newSummary[index].presentCount += 1;
                   newSummary[index].percentage = Math.round(
-                    (newSummary[index].present / newSummary[index].total) * 100
+                    (newSummary[index].presentCount / newSummary[index].totalStudents) * 100
                   );
-                  newSummary[index].lastAttendance = Math.floor(Date.now() / 1000);
+                  newSummary[index].lastAttendance = timestamp;
                 } else {
                   newSummary.push({
                     sessionId,
-                    present: 1,
-                    total: 1,
+                    presentCount: 1,
+                    totalStudents: 1, // adjust if needed
                     percentage: 100,
-                    lastAttendance: Math.floor(Date.now() / 1000),
+                    lastAttendance: timestamp,
                   });
                 }
                 return newSummary;
@@ -153,7 +175,7 @@ export default function StudentDashboard() {
       <h1>Student Dashboard</h1>
       {student && <h2>Welcome, {student.name}</h2>}
 
-      <button onClick={startScanner} disabled={scanning}>
+      <button onClick={startScanner} disabled={scanning || !canScan()}>
         {scanning ? "Scanning..." : "Open Camera to Scan QR"}
       </button>
 
@@ -182,8 +204,8 @@ export default function StudentDashboard() {
             {attendanceSummary.map((s) => (
               <tr key={s.sessionId}>
                 <td>{s.sessionId}</td>
-                <td>{s.present}</td>
-                <td>{s.total}</td>
+                <td>{s.presentCount}</td>
+                <td>{s.totalStudents}</td>
                 <td>{s.percentage}%</td>
                 <td>{formatTimestamp(s.lastAttendance)}</td>
               </tr>

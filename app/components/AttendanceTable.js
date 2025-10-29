@@ -8,12 +8,13 @@ export default function AttendanceSheet({ subjectId, classId }) {
   const [sessions, setSessions] = useState([]);
   const [attendance, setAttendance] = useState({});
 
-  // Load students of class
+  // Load students filtered by classId
   useEffect(() => {
     const fetchStudents = async () => {
       const snap = await get(ref(database, "students"));
       if (snap.exists()) {
         const all = snap.val();
+        // Filter students belonging to the classId
         const filtered = Object.keys(all)
           .filter((sid) => all[sid].classId === classId)
           .map((sid) => ({ id: sid, name: all[sid].name }));
@@ -23,21 +24,26 @@ export default function AttendanceSheet({ subjectId, classId }) {
     fetchStudents();
   }, [classId]);
 
-  // Load sessions
+  // Load sessions for the given subjectId
   useEffect(() => {
     const sessionRef = ref(database, `sessions/${subjectId}`);
     onValue(sessionRef, (snap) => {
       if (snap.exists()) {
-        const sess = Object.keys(snap.val())
-          .map((sid) => ({ id: sid, ...snap.val()[sid] }))
-          .filter((s) => !s.active) // show only stopped sessions
+        const sess = Object.entries(snap.val())
+          // convert to array of {id, ...data}
+          .map(([id, data]) => ({ id, ...data }))
+          // Filter only stopped sessions (active === false)
+          .filter((s) => !s.active)
+          // Sort by startedAt ascending
           .sort((a, b) => a.startedAt - b.startedAt);
         setSessions(sess);
+      } else {
+        setSessions([]);
       }
     });
   }, [subjectId]);
 
-  // Load attendance data
+  // Load attendance for this subjectId
   useEffect(() => {
     const attRef = ref(database, `attendance/${subjectId}`);
     onValue(attRef, (snap) => {
@@ -46,13 +52,13 @@ export default function AttendanceSheet({ subjectId, classId }) {
     });
   }, [subjectId]);
 
-  // Toggle attendance manually (editable)
+  // Toggle attendance manually for a student in a session
   const toggleAttendance = async (sessionId, studentId) => {
     const current = attendance?.[sessionId]?.[studentId]?.present || false;
     const updated = !current;
     const newEntry = {
       present: updated,
-      timestamp: Date.now(),
+      timestamp: Math.floor(Date.now() / 1000), // store in seconds to be consistent
       lat: attendance?.[sessionId]?.[studentId]?.lat || null,
       lng: attendance?.[sessionId]?.[studentId]?.lng || null,
       distance: attendance?.[sessionId]?.[studentId]?.distance || null,
@@ -128,37 +134,38 @@ export default function AttendanceSheet({ subjectId, classId }) {
               {sessions.map((s) => {
                 const entry = attendance[s.id]?.[stu.id];
                 return (
-                  <td
-                    key={s.id}
-                    onClick={() => toggleAttendance(s.id, stu.id)}
-                    style={{
-                      ...tdStyle,
-                      cursor: "pointer",
-                      backgroundColor: entry
-                        ? entry.present
-                          ? entry.distance <= 30
-                            ? "#bbf7d0" // ✅ Present and in range
-                            : "#fde68a" // ⚠️ Present but far away
-                          : "#fecaca"   // ❌ Absent
-                        : "#f1f5f9",    // No record yet
-                    }}
-                    title={`Lat: ${entry?.lat || "-"}, Lng: ${entry?.lng || "-"}, Dist: ${entry?.distance || "?"}m`}
-                  >
-                    {entry?.present ? (entry?.distance <= 30 ? "✅" : "⚠️") : "✖"}
-                    <div style={{ fontSize: "0.6rem", color: "#555" }}>
-                      {entry?.lat && entry?.lng
-                        ? `${entry.lat.toFixed(3)}, ${entry.lng.toFixed(3)}`
-                        : ""}
-                    </div>
-                  </td>
+  <td
+  key={s.id}
+  onClick={() => toggleAttendance(s.id, stu.id)}
+  style={{
+    ...tdStyle,
+    cursor: "pointer",
+    backgroundColor: entry
+      ? entry.present
+        ? entry.distance <= 30
+          ? "#bbf7d0" // ✅ Present and in range
+          : "#fde68a" // ⚠️ Present but far away
+        : "#fecaca"   // ❌ Absent
+      : "#f1f5f9",    // No record yet
+  }}
+  title={`Lat: ${entry?.lat ?? "N/A"}, Lng: ${entry?.lng ?? "N/A"}, Dist: ${entry?.distance ?? "?"}m`}
+>
+  {entry?.present ? (entry?.distance <= 30 ? "✅" : "⚠️") : "✖"}
+  <div style={{ fontSize: "0.7rem", color: "#333", marginTop: 4 }}>
+    {/* Display latitude and longitude with 3 decimals, or show "No location" */}
+    {typeof entry?.lat === "number" && typeof entry?.lng === "number"
+      ? `${entry.lat.toFixed(3)}, ${entry.lng.toFixed(3)}`
+      : "No location"}
+  </div>
+</td>
+
+
                 );
               })}
               <td style={{ ...tdStyle, fontWeight: "bold", backgroundColor: "#fef3c7" }}>
                 {getTotalByStudent(stu.id)}
               </td>
-              <td style={{ ...tdStyle, fontWeight: "bold", color: "#2563eb" }}>
-                {getPercentage(stu.id)}
-              </td>
+              <td style={{ ...tdStyle, fontWeight: "bold", color: "#2563eb" }}>{getPercentage(stu.id)}</td>
             </tr>
           ))}
 
