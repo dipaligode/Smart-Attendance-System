@@ -13,7 +13,8 @@ export default function StudentDashboard() {
   const html5QrcodeScannerRef = useRef(null);
 
   const studentId = "s001"; // Replace with dynamic auth
-  const sessionId = "session001"; // Active session id
+  const subjectId = "s001"; // Must match subject in DB
+  const sessionId = "session001"; // Active session id (should come dynamically)
 
   // Fetch student info
   useEffect(() => {
@@ -24,8 +25,8 @@ export default function StudentDashboard() {
       })
       .catch(console.error);
 
-    // Fetch attendance summary
-    const attendanceRef = ref(database, `attendance`);
+    // Fetch attendance summary for this subject
+    const attendanceRef = ref(database, `attendance/${subjectId}`);
     get(attendanceRef)
       .then((snapshot) => {
         if (snapshot.exists()) {
@@ -53,7 +54,7 @@ export default function StudentDashboard() {
         }
       })
       .catch(console.error);
-  }, []);
+  }, [studentId, subjectId]);
 
   const startScanner = async () => {
     if (!Html5Qrcode.getCameras) {
@@ -89,10 +90,10 @@ export default function StudentDashboard() {
             async (position) => {
               const { latitude, longitude } = position.coords;
 
-              // Save attendance to Firebase
+              // Save attendance to Firebase with subjectId included in path
               const attendanceRef = ref(
                 database,
-                `attendance/${sessionId}/${studentId}`
+                `attendance/${subjectId}/${sessionId}/${studentId}`
               );
 
               await set(attendanceRef, {
@@ -106,7 +107,7 @@ export default function StudentDashboard() {
                 `Attendance marked!\nQR: ${decodedText}\nLat: ${latitude}\nLng: ${longitude}`
               );
 
-              // Update summary table
+              // Update summary table in UI
               setAttendanceSummary((prev) => {
                 const newSummary = [...prev];
                 const index = newSummary.findIndex(
@@ -118,9 +119,7 @@ export default function StudentDashboard() {
                   newSummary[index].percentage = Math.round(
                     (newSummary[index].present / newSummary[index].total) * 100
                   );
-                  newSummary[index].lastAttendance = Math.floor(
-                    Date.now() / 1000
-                  );
+                  newSummary[index].lastAttendance = Math.floor(Date.now() / 1000);
                 } else {
                   newSummary.push({
                     sessionId,
@@ -134,15 +133,13 @@ export default function StudentDashboard() {
               });
             },
             (err) => {
-              alert(
-                "Location permission denied. Cannot mark attendance."
-              );
+              alert("Location permission denied. Cannot mark attendance.");
               console.error(err);
             }
           );
         },
         (errorMessage) => {
-          // optional: handle scan errors
+          // Optional: handle scan errors if needed
         }
       )
       .catch((err) => setError(err.message));
