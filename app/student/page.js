@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { ref, get, set, child } from "firebase/database";
-import { database } from "../../firebase/firebaseConfig";
+import { ref, get, set } from "firebase/database";
+import { database } from "../../firebase/firebaseConfig"; // your firebase config file
 import { Html5Qrcode } from "html5-qrcode";
 
 export default function StudentDashboard() {
@@ -12,8 +12,8 @@ export default function StudentDashboard() {
   const [error, setError] = useState("");
   const html5QrcodeScannerRef = useRef(null);
 
-  const studentId = "s001"; // replace with dynamic auth
-  const sessionId = "session001";
+  const studentId = "s001"; // Replace with dynamic auth
+  const sessionId = "session001"; // Active session id
 
   // Fetch student info
   useEffect(() => {
@@ -25,7 +25,7 @@ export default function StudentDashboard() {
       .catch(console.error);
 
     // Fetch attendance summary
-    const attendanceRef = ref(database, `attendance/${studentId}`);
+    const attendanceRef = ref(database, `attendance`);
     get(attendanceRef)
       .then((snapshot) => {
         if (snapshot.exists()) {
@@ -38,13 +38,17 @@ export default function StudentDashboard() {
             const present = Object.values(sessData).filter(
               (a) => a.present
             ).length;
+            const lastAttendance = sessData[studentId]?.timestamp || null;
+
             summary.push({
-              subjectId: sessId,
+              sessionId: sessId,
               present,
               total,
-              percentage: Math.round((present / total) * 100),
+              percentage: total ? Math.round((present / total) * 100) : 0,
+              lastAttendance,
             });
           });
+
           setAttendanceSummary(summary);
         }
       })
@@ -80,7 +84,7 @@ export default function StudentDashboard() {
           await html5QrcodeScannerRef.current.stop();
           setScanning(false);
 
-          // Get location
+          // Get GPS location
           navigator.geolocation.getCurrentPosition(
             async (position) => {
               const { latitude, longitude } = position.coords;
@@ -88,10 +92,11 @@ export default function StudentDashboard() {
               // Save attendance to Firebase
               const attendanceRef = ref(
                 database,
-                `attendance/${studentId}/${sessionId}/${studentId}`
+                `attendance/${sessionId}/${studentId}`
               );
+
               await set(attendanceRef, {
-                timestamp: Date.now(),
+                timestamp: Math.floor(Date.now() / 1000), // seconds
                 present: true,
                 lat: latitude,
                 lng: longitude,
@@ -101,11 +106,11 @@ export default function StudentDashboard() {
                 `Attendance marked!\nQR: ${decodedText}\nLat: ${latitude}\nLng: ${longitude}`
               );
 
-              // Update summary table after marking
+              // Update summary table
               setAttendanceSummary((prev) => {
                 const newSummary = [...prev];
                 const index = newSummary.findIndex(
-                  (s) => s.subjectId === sessionId
+                  (s) => s.sessionId === sessionId
                 );
                 if (index >= 0) {
                   newSummary[index].present += 1;
@@ -113,29 +118,38 @@ export default function StudentDashboard() {
                   newSummary[index].percentage = Math.round(
                     (newSummary[index].present / newSummary[index].total) * 100
                   );
+                  newSummary[index].lastAttendance = Math.floor(
+                    Date.now() / 1000
+                  );
                 } else {
                   newSummary.push({
-                    subjectId: sessionId,
+                    sessionId,
                     present: 1,
                     total: 1,
                     percentage: 100,
+                    lastAttendance: Math.floor(Date.now() / 1000),
                   });
                 }
                 return newSummary;
               });
             },
             (err) => {
-              alert("Location permission denied. Cannot mark attendance.");
+              alert(
+                "Location permission denied. Cannot mark attendance."
+              );
               console.error(err);
             }
           );
         },
         (errorMessage) => {
-          // optional: console.log("Scan error", errorMessage);
+          // optional: handle scan errors
         }
       )
       .catch((err) => setError(err.message));
   };
+
+  const formatTimestamp = (ts) =>
+    ts ? new Date(ts * 1000).toLocaleString() : "-";
 
   return (
     <div style={{ padding: "20px" }}>
@@ -148,10 +162,8 @@ export default function StudentDashboard() {
 
       {error && <p style={{ color: "red" }}>{error}</p>}
 
-      {/* QR code scanner element */}
       <div id="reader" style={{ width: "300px", marginTop: "20px" }}></div>
 
-      {/* Attendance Analysis Table */}
       {attendanceSummary.length > 0 && (
         <table
           style={{
@@ -166,15 +178,17 @@ export default function StudentDashboard() {
               <th>Present</th>
               <th>Total</th>
               <th>%</th>
+              <th>Last Attendance</th>
             </tr>
           </thead>
           <tbody>
             {attendanceSummary.map((s) => (
-              <tr key={s.subjectId}>
-                <td>{s.subjectId}</td>
+              <tr key={s.sessionId}>
+                <td>{s.sessionId}</td>
                 <td>{s.present}</td>
                 <td>{s.total}</td>
                 <td>{s.percentage}%</td>
+                <td>{formatTimestamp(s.lastAttendance)}</td>
               </tr>
             ))}
           </tbody>
