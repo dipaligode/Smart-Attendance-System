@@ -4,6 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import { ref, get, set } from "firebase/database";
 import { database } from "../../firebase/firebaseConfig"; // your firebase config file
 import { Html5Qrcode } from "html5-qrcode";
+import { update } from "firebase/database"; // import update
+
+
 
 export default function StudentDashboard() {
   const [student, setStudent] = useState(null);
@@ -119,12 +122,13 @@ export default function StudentDashboard() {
                 `attendance/${subjectId}/${sessionId}/${studentId}`
               );
 
-              await set(attendanceRef, {
-                timestamp,
-                present: true,
-                lat: latitude,
-                lng: longitude,
-              });
+              await update(attendanceRef, {
+  timestamp,
+  present: true,
+  lat: latitude,
+  lng: longitude,
+});
+
 
               alert(
                 `Attendance marked!\nQR: ${decodedText}`
