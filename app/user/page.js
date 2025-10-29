@@ -11,8 +11,13 @@ export default function StudentDashboard() {
   const [message, setMessage] = useState("");
   const [attendanceSummary, setAttendanceSummary] = useState([]);
   const [scanner, setScanner] = useState(null);
-  const [cameraAllowed, setCameraAllowed] = useState(false);
+  const [ready, setReady] = useState(false);
   const readerRef = useRef(null);
+
+  // ✅ Ensure reader div exists before mounting
+  useEffect(() => {
+    setReady(true);
+  }, []);
 
   // ✅ Load student info
   useEffect(() => {
@@ -38,7 +43,6 @@ export default function StudentDashboard() {
     }
   };
 
-  // ✅ Load attendance summary
   const loadAttendanceSummary = async (studentId) => {
     const attSnap = await get(ref(database, "attendance"));
     if (!attSnap.exists()) return;
@@ -47,7 +51,8 @@ export default function StudentDashboard() {
     const result = [];
     Object.keys(data).forEach((subjectId) => {
       const subjectSessions = data[subjectId];
-      let total = 0, present = 0;
+      let total = 0;
+      let present = 0;
 
       Object.keys(subjectSessions).forEach((sessionId) => {
         total++;
@@ -60,39 +65,25 @@ export default function StudentDashboard() {
     setAttendanceSummary(result);
   };
 
-  // ✅ Check and request camera permission
-  const requestCameraPermission = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (stream) {
-        setCameraAllowed(true);
-        stream.getTracks().forEach((track) => track.stop());
-      }
-    } catch (err) {
-      console.warn("Camera blocked by browser");
-      setCameraAllowed(false);
-      setMessage("⚠️ Please enable camera permissions in browser settings.");
-    }
-  };
-
-  useEffect(() => {
-    requestCameraPermission(); // Try automatically once
-  }, []);
-
-  // ✅ Start QR scanner
+  // ✅ Start QR Scanner safely
   const startScanner = async () => {
-    if (!cameraAllowed) {
-      setMessage("⚠️ Camera access not granted yet.");
-      return;
-    }
-    if (scanner) {
-      setMessage("Camera already active!");
-      return;
-    }
-
     try {
+      setMessage("");
       setScanning(true);
-      const html5QrCode = new Html5Qrcode("reader");
+
+      // ✅ Make sure the reader div is present
+      const readerElem = document.getElementById("reader");
+      if (!readerElem) {
+        setMessage("❌ QR container not found in DOM.");
+        setScanning(false);
+        return;
+      }
+
+      // Ask for permission (triggers popup if needed)
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach((t) => t.stop());
+
+      const html5QrCode = new Html5Qrcode("reader"); // ✅ Using ID string safely
       setScanner(html5QrCode);
 
       await html5QrCode.start(
@@ -105,11 +96,18 @@ export default function StudentDashboard() {
           await handleQrScan(qrValue);
         }
       );
+
+      setMessage("📷 Camera started. Scan a QR code now!");
     } catch (err) {
-      console.error(err);
-      setMessage("❌ Unable to open camera. Try enabling permissions.");
+      console.error("Camera start failed:", err);
+      if (err.name === "NotAllowedError") {
+        setMessage("⚠️ Please allow camera access in your browser.");
+      } else if (err.name === "NotFoundError") {
+        setMessage("❌ No camera found on this device.");
+      } else {
+        setMessage("❌ Unable to start camera. Please enable permissions and use HTTPS.");
+      }
       setScanning(false);
-      setCameraAllowed(false);
     }
   };
 
@@ -134,7 +132,6 @@ export default function StudentDashboard() {
         return;
       }
 
-      // ✅ Get Location
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           const lat = pos.coords.latitude;
@@ -158,14 +155,17 @@ export default function StudentDashboard() {
     }
   };
 
+  // ✅ Stop scanner
   const stopScanner = async () => {
     if (scanner) {
       await scanner.stop();
       setScanner(null);
-      setScanning(false);
-      setMessage("🛑 Scanner stopped");
     }
+    setScanning(false);
+    setMessage("🛑 Scanner stopped");
   };
+
+  if (!ready) return null; // Ensure reader div renders first
 
   return (
     <div style={{ padding: 40, fontFamily: "Inter, sans-serif" }}>
@@ -179,24 +179,26 @@ export default function StudentDashboard() {
             Welcome, <span style={{ color: "#2563eb" }}>{student.name}</span>
           </h3>
 
-          {!cameraAllowed ? (
-            <div>
-              <p>⚠️ Camera permission required.</p>
-              <button style={btnStyle} onClick={requestCameraPermission}>
-                🎥 Enable Camera
-              </button>
-            </div>
-          ) : !scanning ? (
+          {/* ✅ Reader div always in DOM */}
+          <div
+            id="reader"
+            ref={readerRef}
+            style={{
+              width: "100%",
+              maxWidth: 400,
+              marginTop: 20,
+              display: scanning ? "block" : "none",
+            }}
+          />
+
+          {!scanning ? (
             <button style={btnStyle} onClick={startScanner}>
               📷 Open Camera to Scan QR
             </button>
           ) : (
-            <>
-              <div id="reader" ref={readerRef} style={{ width: "100%", maxWidth: 400 }} />
-              <button onClick={stopScanner} style={stopBtnStyle}>
-                🛑 Stop Scanning
-              </button>
-            </>
+            <button onClick={stopScanner} style={stopBtnStyle}>
+              🛑 Stop Scanning
+            </button>
           )}
 
           {message && <p style={{ marginTop: 10, fontWeight: "bold" }}>{message}</p>}
